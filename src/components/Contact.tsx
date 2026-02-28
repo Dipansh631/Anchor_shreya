@@ -103,8 +103,19 @@ export default function Contact() {
                 </div>
             </div>
 
+            {/* Massive Cinematic End Title */}
+            <motion.h1
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 1.2, ease: "easeOut" }}
+                viewport={{ once: true, margin: "-50px" }}
+                className="text-5xl md:text-7xl lg:text-9xl font-bold text-white uppercase tracking-tighter text-center w-full mt-32 mb-16"
+            >
+                Let&apos;s work together
+            </motion.h1>
+
             {/* Sub-Footer Revealed Post-Loading */}
-            <footer className={`mt-24 w-full max-w-6xl mx-auto border-t border-white/5 pt-12 text-center transition-all duration-1000 transform delay-300 ${sectionReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+            <footer className={`w-full max-w-6xl mx-auto border-t border-white/5 pt-12 text-center transition-all duration-1000 transform delay-300 ${sectionReady ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
                 <div className="font-heading text-xl text-white mb-2">{SITE_DATA.name}</div>
                 <p className="text-brand-muted text-sm mb-6">{SITE_DATA.title} • Dubai, UAE</p>
                 <div className="flex justify-center gap-6 mb-8 text-sm">
@@ -115,6 +126,6 @@ export default function Contact() {
                 <p className="text-white/20 text-xs text-center">&copy; {new Date().getFullYear()} {SITE_DATA.name}. All rights reserved.</p>
             </footer>
 
-        </section>
+        </section >
     );
 }

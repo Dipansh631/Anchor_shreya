@@ -91,11 +91,8 @@ export default function Home() {
         <Intro3D onComplete={() => setIntroFinished(true)} />
       )}
 
-      {/* Main Website Wrapper */}
-      <main className={`transition-opacity duration-1000 pointer-events-none ${introFinished ? "opacity-100" : "opacity-0"}`}>
-        <Background3D />
-
-        {/* Navigation Navbar (Desktop & Mobile) handled cleanly */}
+      <main className={`transition-opacity duration-1000 ${introFinished ? "opacity-100" : "opacity-0"}`}>
+        {/* fixed Navbar */}
         <nav className="fixed top-0 left-0 w-full p-6 flex justify-between items-center z-50 bg-transparent backdrop-blur-md border-b border-white/5 pointer-events-auto">
           <div className="font-heading text-2xl font-bold text-gold tracking-widest">SM</div>
           <div className="hidden md:flex gap-8 text-brand-muted text-sm uppercase tracking-wider font-medium">
@@ -109,16 +106,26 @@ export default function Home() {
           </a>
         </nav>
 
-        <div className={`transition-opacity duration-1000 ${hideContent ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-          <Hero />
-          <Stats />
-          <About />
-          <Showreel />
-          <Experience />
-          <Gallery />
-          <Testimonials />
+        <div className={`relative flex flex-col md:flex-row w-full transition-opacity duration-1000 ${hideContent ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+
+          {/* LEFT SIDE: Scrollable Content */}
+          <div className="w-full md:w-[55%] lg:w-[50%] z-10 pointer-events-auto flex flex-col pt-24">
+            <Hero />
+            <Stats />
+            <About />
+            <Showreel />
+            <Experience />
+            <Gallery />
+            <Testimonials />
+            <Contact />
+          </div>
+
+          {/* RIGHT SIDE: Sticky Cinematic Canvas */}
+          {/* On mobile: pinned to top (-z-10) and full width. On desktop: takes remaining right side sticky */}
+          <div className="fixed inset-0 md:static w-full md:w-[45%] lg:w-[50%] h-screen md:sticky md:top-0 md:self-start -z-10 md:z-0 pointer-events-none">
+            <Background3D />
+          </div>
         </div>
-        <Contact />
       </main>
     </>
   );

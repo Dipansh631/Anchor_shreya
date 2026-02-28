@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useEffect, useState } from "react";
+import { Suspense, useRef, useEffect, useState, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, Environment, Center, Sky, Cloud, Stars } from "@react-three/drei";
 import * as THREE from "three";
@@ -27,20 +27,17 @@ function DynamicClouds({ isMobile }: { isMobile: boolean }) {
                 cloudGroup.current.position.x = 60;
             }
 
-            const cycle = state.clock.elapsedTime % 30;
-            let phaseIndex = 0;
-            let nextPhaseIndex = 1;
-            let lerpFactor = 0;
+            // Calculate exact global scroll progress from 0.0 (top) to 1.0 (bottom)
+            const scrollY = window.scrollY;
+            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+            const progress = maxScroll > 0 ? scrollY / maxScroll : 0;
 
-            if (cycle < 7.5) {
-                phaseIndex = 0; nextPhaseIndex = 1; lerpFactor = cycle / 7.5;
-            } else if (cycle < 15) {
-                phaseIndex = 1; nextPhaseIndex = 2; lerpFactor = (cycle - 7.5) / 7.5;
-            } else if (cycle < 22.5) {
-                phaseIndex = 2; nextPhaseIndex = 3; lerpFactor = (cycle - 15) / 7.5;
-            } else {
-                phaseIndex = 3; nextPhaseIndex = 0; lerpFactor = (cycle - 22.5) / 7.5;
-            }
+            // 4 phases spreading perfectly across the 0-1 scroll length
+            // Multiply by 3 so we interpolate between index 0->1, 1->2, 2->3
+            const mappedProgress = THREE.MathUtils.clamp(progress * 3, 0, 2.999);
+            const phaseIndex = Math.floor(mappedProgress);
+            const nextPhaseIndex = phaseIndex + 1;
+            const lerpFactor = mappedProgress % 1;
 
             const current = cloudPhases[phaseIndex];
             const next = cloudPhases[nextPhaseIndex];
@@ -113,11 +110,9 @@ function BurjKhalifa({ isMobile }: { isMobile: boolean }) {
     });
 
     return (
-        // Fixed on the RIGHT side of the screen
-        // Increase the X value to push it further right
-        <group ref={ref} position={[isMobile ? 3.5 : 10, 0, 0]}>
-            {/* Scale heavily restricts the model into a standard unit size */}
-            {/* Note: Scale MUST be a positive number. Decimals like 0.5, 1, or 2 make it very small. */}
+        // Mobile uses offset because canvas is full width behind text.
+        // Desktop uses X=0 (perfectly centered) because the canvas is now an Apple-style fixed right-pane!
+        <group ref={ref} position={[isMobile ? 3.5 : 0, 0, 0]}>
             <Center scale={isMobile ? 0.2 : 0.4}>
                 <primitive object={scene} />
             </Center>
@@ -152,20 +147,22 @@ function CameraRig({ isMobile }: { isMobile: boolean }) {
         let targetLookY;
         let targetCameraX;
 
-        const modelX = isMobile ? 3.5 : 10;
+        // Model is centered in its 50% split pane on Desktop now
+        const modelX = isMobile ? 3.5 : 0;
 
         // Dynamically find when the Contact section enters the screen!
         const contactEl = document.getElementById("contact");
         let fallTriggerProgress = 0.95; // Default fallback
 
         if (contactEl && maxScroll > 0) {
-            // Absolute Y offset of the top of the Contact section relative to the document
             const absoluteTop = contactEl.getBoundingClientRect().top + window.scrollY;
-            // The scroll position where the contact section exactly starts entering the bottom of the viewport
             const triggerScrollY = absoluteTop - window.innerHeight;
-            // Map that scrollY into a progress percentage
             fallTriggerProgress = Math.max(0, triggerScrollY / maxScroll);
         }
+
+        // Camera scroll tilting logic (slight rotation tilt as you scroll)
+        const baseTilt = THREE.MathUtils.lerp(0, 0.05, progress);
+        camera.rotation.z = THREE.MathUtils.damp(camera.rotation.z, baseTilt, 3, delta);
 
         // When the user hits the Contact area
         if (progress > fallTriggerProgress && fallTriggerProgress < 1) {
@@ -263,23 +260,15 @@ function SkyManager() {
     ];
 
     useFrame((state, delta) => {
-        // 30 second loop (7.5s per phase)
-        const cycle = state.clock.elapsedTime % 30;
+        // Tie lighting and atmosphere natively to the scroll depth of the Apple-style content panel
+        const scrollY = window.scrollY;
+        const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        const progress = maxScroll > 0 ? scrollY / maxScroll : 0;
 
-        // Find which phase we are currently in
-        let phaseIndex = 0;
-        let nextPhaseIndex = 1;
-        let lerpFactor = 0;
-
-        if (cycle < 7.5) {
-            phaseIndex = 0; nextPhaseIndex = 1; lerpFactor = cycle / 7.5;
-        } else if (cycle < 15) {
-            phaseIndex = 1; nextPhaseIndex = 2; lerpFactor = (cycle - 7.5) / 7.5;
-        } else if (cycle < 22.5) {
-            phaseIndex = 2; nextPhaseIndex = 3; lerpFactor = (cycle - 15) / 7.5;
-        } else {
-            phaseIndex = 3; nextPhaseIndex = 0; lerpFactor = (cycle - 22.5) / 7.5;
-        }
+        const mappedProgress = THREE.MathUtils.clamp(progress * 3, 0, 2.999);
+        const phaseIndex = Math.floor(mappedProgress);
+        const nextPhaseIndex = phaseIndex + 1;
+        const lerpFactor = mappedProgress % 1;
 
         const current = phases[phaseIndex];
         const next = phases[nextPhaseIndex];
@@ -335,6 +324,137 @@ function SkyManager() {
     );
 }
 
+// Procedural physics particle system for evening/night fireworks
+function FireworkBurst({ delayOffset }: { delayOffset: number }) {
+    const pointsRef = useRef<THREE.Points>(null);
+    const particleCount = 800; // 800 sparks per firework!
+
+    const [positions, velocities, colors] = useMemo(() => {
+        const p = new Float32Array(particleCount * 3);
+        const v = new Float32Array(particleCount * 3);
+        const c = new Float32Array(particleCount * 3);
+        for (let i = 0; i < particleCount; i++) {
+            p[i * 3 + 1] = -1000; // Hide way below screen initially
+        }
+        return [p, v, c];
+    }, [particleCount]);
+
+    const timeSinceBurst = useRef(delayOffset);
+    const center = useRef(new THREE.Vector3(0, -100, 0));
+
+    useFrame((state, delta) => {
+        const scrollY = window.scrollY;
+        const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        const progress = maxScroll > 0 ? scrollY / maxScroll : 0;
+
+        if (!pointsRef.current) return;
+        const mat = pointsRef.current.material as THREE.PointsMaterial;
+
+        // Start shooting fireworks roughly at evening -> night (0.7 progress and beyond)
+        if (progress > 0.7) {
+            mat.opacity = THREE.MathUtils.lerp(mat.opacity, 1, 0.05);
+            timeSinceBurst.current += delta;
+
+            if (timeSinceBurst.current > 3.0) {
+                // Time for a new explosion!
+                timeSinceBurst.current = 0;
+
+                // Firecracker location in the high ceiling cloud area
+                center.current.set(
+                    (Math.random() - 0.5) * 50, // Between -25 and +25 X spread
+                    15 + Math.random() * 20,    // High up
+                    -10 - Math.random() * 15    // Mid-background
+                );
+
+                const colorPalette = [
+                    new THREE.Color("#FF4500"), // Red/Orange
+                    new THREE.Color("#00FF88"), // Mint Green
+                    new THREE.Color("#00BFFF"), // Sky Blue
+                    new THREE.Color("#FFD700"), // Golden
+                    new THREE.Color("#FF1493")  // Hot Pink
+                ];
+
+                const burstColor = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+                const secondaryColor = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+
+                const posArray = pointsRef.current.geometry.attributes.position.array as Float32Array;
+                const colArray = pointsRef.current.geometry.attributes.color.array as Float32Array;
+
+                // Eject 800 particles spherically
+                for (let i = 0; i < particleCount; i++) {
+                    posArray[i * 3 + 0] = center.current.x;
+                    posArray[i * 3 + 1] = center.current.y;
+                    posArray[i * 3 + 2] = center.current.z;
+
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos((Math.random() * 2) - 1);
+                    const speed = Math.random() * 25 + 5; // Explosion velocity
+
+                    velocities[i * 3 + 0] = Math.sin(phi) * Math.cos(theta) * speed;
+                    velocities[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
+                    velocities[i * 3 + 2] = Math.cos(phi) * speed;
+
+                    // Mixed colors in the same shell
+                    const c = Math.random() > 0.4 ? burstColor : secondaryColor;
+                    colArray[i * 3 + 0] = c.r;
+                    colArray[i * 3 + 1] = c.g;
+                    colArray[i * 3 + 2] = c.b;
+                }
+                pointsRef.current.geometry.attributes.color.needsUpdate = true;
+            }
+
+            // Animate flying particles frame-by-frame
+            const posArray = pointsRef.current.geometry.attributes.position.array as Float32Array;
+            const colArray = pointsRef.current.geometry.attributes.color.array as Float32Array;
+
+            for (let i = 0; i < particleCount; i++) {
+                // Explosion drag & resistance
+                velocities[i * 3 + 0] *= 0.95;
+                velocities[i * 3 + 1] -= 5.0 * delta; // Gravity pull downwards
+                velocities[i * 3 + 1] *= 0.95;
+                velocities[i * 3 + 2] *= 0.95;
+
+                posArray[i * 3 + 0] += velocities[i * 3 + 0] * delta;
+                posArray[i * 3 + 1] += velocities[i * 3 + 1] * delta;
+                posArray[i * 3 + 2] += velocities[i * 3 + 2] * delta;
+
+                // Color gradually fades to exact black over 1.5 seconds.
+                // When color reaches black (0,0,0), AdditiveBlending automatically makes it fully invisible! 
+                colArray[i * 3 + 0] *= 0.96;
+                colArray[i * 3 + 1] *= 0.96;
+                colArray[i * 3 + 2] *= 0.96;
+            }
+            pointsRef.current.geometry.attributes.position.needsUpdate = true;
+            pointsRef.current.geometry.attributes.color.needsUpdate = true;
+
+        } else {
+            mat.opacity = THREE.MathUtils.lerp(mat.opacity, 0, 0.1);
+        }
+    });
+
+    return (
+        <points ref={pointsRef}>
+            <bufferGeometry>
+                <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+                <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+            </bufferGeometry>
+            {/* Additive Blending merges light beams. Depth write disabled so transparency passes perfectly through */}
+            <pointsMaterial size={0.6} vertexColors transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </points>
+    );
+}
+
+function FireworksManager() {
+    return (
+        <group>
+            {/* 3 staggered overlapping bursts */}
+            <FireworkBurst delayOffset={0} />
+            <FireworkBurst delayOffset={1.0} />
+            <FireworkBurst delayOffset={2.0} />
+        </group>
+    );
+}
+
 export default function Background3D() {
     const isMobile = useMediaQuery("(max-width: 768px)");
     const [mounted, setMounted] = useState(false);
@@ -361,6 +481,7 @@ export default function Background3D() {
                 </Suspense>
 
                 <CameraRig isMobile={!!isMobile} />
+                <FireworksManager />
 
                 {/* Soft atmospheric depth matching the bright sky */}
                 <fog attach="fog" args={["#87CEEB", 20, 100]} />
