@@ -134,29 +134,101 @@ const CameraRig = () => {
     const time = useRef(0);
     useFrame((state, delta) => {
         time.current += delta;
-        // Move forward
+        // Move forward slightly
         state.camera.position.z += (35 - state.camera.position.z) * 0.003;
-        // Parallax
-        state.camera.position.y = 5 + Math.sin(time.current * 0.5) * 1.5;
         state.camera.lookAt(0, 10, -30);
     });
     return null;
 };
 
-export default function Intro3D({ onComplete }: { onComplete: () => void }) {
-    const [stage, setStage] = useState(0);
-    const isMobile = useDevice();
+const VideoBackground = () => {
+    const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 
     useEffect(() => {
-        // Stage timings
+        const video = document.createElement('video');
+        video.src = "/videos/front-screen.mp4";
+        video.crossOrigin = "Anonymous";
+        video.loop = true;
+        video.muted = false; // Try audio by default
+        video.playsInline = true;
+
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(e => {
+                // Browser definitively blocked unmuted autoplay.
+                if (e.name === 'NotAllowedError') {
+                    video.muted = true; // Fallback to muted so the video shows!
+                    video.play().catch(err => console.error("Muted playback failed:", err));
+
+                    // Secretly restore audio the moment they interact in ANY way
+                    const silentUnmute = () => {
+                        if (video.muted) {
+                            video.muted = false;
+                            video.play().catch(() => { }); // Resync play to be safe
+                        }
+                        const events = ['click', 'scroll', 'mousemove', 'touchstart', 'keydown', 'pointerdown'];
+                        events.forEach(evt => window.removeEventListener(evt, silentUnmute));
+                    };
+
+                    const events = ['click', 'scroll', 'mousemove', 'touchstart', 'keydown', 'pointerdown'];
+                    events.forEach(evt => window.addEventListener(evt, silentUnmute, { once: true }));
+                }
+            });
+        }
+
+        setVideoElement(video);
+
+        const handleStopAudio = () => {
+            if (video) {
+                video.muted = true;
+            }
+        };
+
+        window.addEventListener('stopIntroAudio', handleStopAudio);
+
+        return () => {
+            window.removeEventListener('stopIntroAudio', handleStopAudio);
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+        };
+    }, []);
+
+    if (!videoElement) return null;
+
+    return (
+        <mesh position={[0, 10, -50]} scale={[160, 90, 1]}>
+            <planeGeometry />
+            <meshBasicMaterial side={THREE.DoubleSide} toneMapped={false}>
+                <videoTexture attach="map" args={[videoElement]} />
+            </meshBasicMaterial>
+        </mesh>
+    );
+};
+
+export default function Intro3D({ onComplete }: { onComplete: () => void }) {
+    const [stage, setStage] = useState(0);
+
+    useEffect(() => {
+        // Start showing text sequences on video load
+        setStage(1); // Set base stage to show the video
+
         const timers = [
-            setTimeout(() => setStage(1), 1200), // Text 1 fades in
-            setTimeout(() => setStage(2), 3200), // Text 1 fades out
-            setTimeout(() => setStage(3), 4000), // Text 2 fades in
-            setTimeout(() => onComplete(), 6500) // End intro
+            setTimeout(() => setStage(2), 500),   // "Hi, this is Shreya Maheshwari"
+            setTimeout(() => setStage(3), 5500),  // 1000+ Shows Hosted
+            setTimeout(() => setStage(4), 10500), // 40+ International Events
+            setTimeout(() => setStage(5), 15500), // 300+ Luxury & Corporate
+            setTimeout(() => setStage(6), 20500), // Location Display
+            setTimeout(() => setStage(7), 25500), // Enter Experience Button
         ];
+
         return () => timers.forEach(clearTimeout);
-    }, [onComplete]);
+    }, []);
+
+    const handleComplete = () => {
+        window.dispatchEvent(new Event('stopIntroAudio'));
+        onComplete();
+    };
 
     return (
         <motion.div
@@ -164,59 +236,124 @@ export default function Intro3D({ onComplete }: { onComplete: () => void }) {
             exit={{ opacity: 0, transition: { duration: 1.5, ease: "easeInOut" } }}
         >
             <div className="absolute inset-0 opacity-0 animate-[fadeIn_2s_ease-in-out_300ms_forwards]">
-                <Canvas camera={{ position: [0, 5, 60], fov: 50 }} gl={{ alpha: true }}>
-                    <fogExp2 attach="fog" args={["#020202", 0.015]} />
-
-                    <Skyline isMobile={isMobile} />
-                    <Particles isMobile={isMobile} />
-                    <Spotlights isMobile={isMobile} />
+                <Canvas camera={{ position: [0, 5, 20], fov: 60 }} gl={{ alpha: true }}>
+                    <VideoBackground />
                     <CameraRig />
 
-                    <mesh rotation-x={-Math.PI / 2} position-y={-5}>
-                        <planeGeometry args={[200, 200]} />
-                        <meshStandardMaterial color="#020202" roughness={0.1} metalness={0.9} />
-                    </mesh>
-
-                    <ambientLight color="#050510" intensity={1.5} />
-                    <pointLight color="#D4AF37" position={[0, 5, 10]} intensity={5} distance={50} />
+                    <ambientLight color="#ffffff" intensity={0} />
                 </Canvas>
             </div>
 
-            <div className="absolute z-[10001] text-center pointer-events-none w-full">
+            <div className="absolute z-[10001] pointer-events-none w-full h-full flex flex-col items-center justify-center">
                 <AnimatePresence mode="wait">
-                    {stage === 1 && (
-                        <motion.div
-                            key="text1"
-                            initial={{ opacity: 0, scale: 1 }}
-                            animate={{ opacity: 1, scale: 1.05 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 1, ease: "easeInOut" }}
-                            className="text-white text-3xl md:text-5xl lg:text-6xl font-heading tracking-widest whitespace-nowrap"
-                        >
-                            Ladies &amp; Gentlemen...
-                        </motion.div>
-                    )}
-                    {stage === 3 && (
-                        <motion.div
-                            key="text2"
-                            initial={{ opacity: 0, scale: 1 }}
-                            animate={{ opacity: 1, scale: 1.05 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 1, ease: "easeInOut" }}
-                            className="text-gold text-4xl md:text-6xl lg:text-7xl font-heading tracking-widest whitespace-nowrap"
-                        >
-                            Shreya Maheshwari
-                        </motion.div>
+                    {stage >= 1 && (
+                        <div className="absolute inset-x-0 bottom-32 flex flex-col items-center justify-center pointer-events-none">
+                            <AnimatePresence>
+                                {stage === 2 && (
+                                    <motion.div
+                                        key="text2"
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 1.1 }}
+                                        transition={{ duration: 1.5, ease: "easeOut" }}
+                                        className="absolute text-white drop-shadow-[0_0_15px_rgba(0,0,0,0.8)] text-4xl md:text-5xl lg:text-7xl font-heading tracking-widest text-center px-4 leading-tight"
+                                    >
+                                        Hi, this is<br />SHREYA <span className="text-gold">MAHESHWARI</span>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <AnimatePresence>
+                                <div className="absolute flex flex-col items-center justify-center w-full px-4 mt-8">
+                                    {stage === 3 && (
+                                        <motion.div
+                                            key="stat1"
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 1.1 }}
+                                            transition={{ duration: 1 }}
+                                            className="absolute flex flex-col items-center backdrop-blur-md bg-black/40 p-8 rounded-xl border border-white/10 w-64 text-center"
+                                        >
+                                            <span className="text-gold text-5xl md:text-6xl font-bold mb-2">1000+</span>
+                                            <span className="text-white/80 text-sm md:text-base uppercase tracking-widest">Shows Hosted</span>
+                                        </motion.div>
+                                    )}
+                                    {stage === 4 && (
+                                        <motion.div
+                                            key="stat2"
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 1.1 }}
+                                            transition={{ duration: 1 }}
+                                            className="absolute flex flex-col items-center backdrop-blur-md bg-black/40 p-8 rounded-xl border border-white/10 w-64 text-center"
+                                        >
+                                            <span className="text-gold text-5xl md:text-6xl font-bold mb-2">40+</span>
+                                            <span className="text-white/80 text-sm md:text-base uppercase tracking-widest">Int'l Events</span>
+                                        </motion.div>
+                                    )}
+                                    {stage === 5 && (
+                                        <motion.div
+                                            key="stat3"
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 1.1 }}
+                                            transition={{ duration: 1 }}
+                                            className="absolute flex flex-col items-center backdrop-blur-md bg-black/40 p-8 rounded-xl border border-white/10 w-64 text-center"
+                                        >
+                                            <span className="text-gold text-5xl md:text-6xl font-bold mb-2">300+</span>
+                                            <span className="text-white/80 text-sm md:text-base uppercase tracking-widest">Luxury Events</span>
+                                        </motion.div>
+                                    )}
+                                </div>
+                            </AnimatePresence>
+
+                            <AnimatePresence>
+                                {stage === 6 && (
+                                    <motion.div
+                                        key="location"
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 1.1 }}
+                                        transition={{ duration: 1 }}
+                                        className="absolute mt-8 text-center w-full px-4"
+                                    >
+                                        <p className="text-white/90 text-lg md:text-2xl tracking-[0.2em] font-light drop-shadow-md pb-4">
+                                            Dubai Based, Global Reach
+                                        </p>
+                                        <p className="text-white/60 text-sm md:text-base tracking-wider max-w-lg mx-auto leading-relaxed">
+                                            Specializing in Dubai & India. Available globally for premium stage engagements.
+                                        </p>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <AnimatePresence>
+                                {stage >= 7 && (
+                                    <motion.button
+                                        key="enterBtn"
+                                        initial={{ opacity: 0, scale: 0.9 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ duration: 1 }}
+                                        onClick={handleComplete}
+                                        className="absolute mt-8 px-10 py-4 bg-transparent border border-gold text-gold rounded pointer-events-auto uppercase tracking-[0.2em] font-medium hover:bg-gold hover:text-black transition-all duration-300 text-base shadow-[0_0_30px_rgba(212,175,55,0.2)]"
+                                    >
+                                        Enter Experience
+                                    </motion.button>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     )}
                 </AnimatePresence>
             </div>
 
-            <button
-                onClick={onComplete}
-                className="absolute bottom-8 right-8 text-white/40 hover:text-gold text-sm uppercase tracking-[2px] z-[10002] transition-colors"
-            >
-                Tap to Skip
-            </button>
+            {stage < 7 && (
+                <button
+                    onClick={handleComplete}
+                    className="absolute bottom-8 right-8 text-white/40 hover:text-gold text-sm uppercase tracking-[2px] z-[10002] transition-colors pointer-events-auto"
+                >
+                    Skip Intro
+                </button>
+            )}
 
             <style>{`
         @keyframes fadeIn {

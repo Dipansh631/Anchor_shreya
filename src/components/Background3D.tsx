@@ -77,48 +77,7 @@ function DynamicClouds({ isMobile }: { isMobile: boolean }) {
     );
 }
 
-function BurjKhalifa({ isMobile }: { isMobile: boolean }) {
-    const { scene } = useGLTF("/assets/free__burj_khalifa_dubai.glb");
-    const ref = useRef<THREE.Group>(null);
 
-    const time = useRef(0);
-    useFrame((state, delta) => {
-        if (ref.current) {
-            const scrollY = window.scrollY;
-            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-            const progress = maxScroll > 0 ? scrollY / maxScroll : 0;
-
-            time.current += delta;
-
-            // 1. Removed spinning entirely: model remains fixed on the Y axis
-
-            // 2. Continuous float + Scroll-driven Y shift (Model physically ascends as you scroll down)
-            const floatY = Math.sin(time.current) * 0.2;
-
-            // The model moves UP the screen as you scroll DOWN the page. 
-            // We increase the range so the "moving up/down" is more noticeable.
-            const targetY = THREE.MathUtils.lerp(-3.0, 3.0, progress);
-
-            // Using frame-rate independent dampening for ultra-smooth buttery tracking
-            ref.current.position.y = THREE.MathUtils.damp(
-                ref.current.position.y,
-                targetY + floatY,
-                3, // lambda/stiffness (lower is smoother/heavier)
-                delta
-            );
-        }
-    });
-
-    return (
-        // Mobile uses offset because canvas is full width behind text.
-        // Desktop uses X=0 (perfectly centered) because the canvas is now an Apple-style fixed right-pane!
-        <group ref={ref} position={[isMobile ? 3.5 : 0, 0, 0]}>
-            <Center scale={isMobile ? 0.2 : 0.4}>
-                <primitive object={scene} />
-            </Center>
-        </group>
-    );
-}
 
 function CameraRig({ isMobile }: { isMobile: boolean }) {
     const { camera } = useThree();
@@ -476,7 +435,6 @@ export default function Background3D() {
                 <Environment preset="city" />
 
                 <Suspense fallback={null}>
-                    <BurjKhalifa isMobile={!!isMobile} />
                     <DynamicClouds isMobile={!!isMobile} />
                 </Suspense>
 
@@ -489,5 +447,3 @@ export default function Background3D() {
         </div>
     );
 }
-
-useGLTF.preload("/assets/free__burj_khalifa_dubai.glb");

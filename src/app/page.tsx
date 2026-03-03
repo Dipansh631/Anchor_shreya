@@ -15,9 +15,17 @@ import { SITE_DATA } from "@/lib/constants";
 
 export default function Home() {
   const [introFinished, setIntroFinished] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
   const [hideContent, setHideContent] = useState(false);
   const isDroppingRef = useRef(false);
 
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  const handleIntroComplete = () => {
+    setIntroFinished(true);
+  };
   useEffect(() => {
     const handleDrop = () => {
       setHideContent(true);
@@ -84,11 +92,13 @@ export default function Home() {
     return () => { document.body.style.overflow = "auto"; };
   }, [introFinished]);
 
+  if (!hasMounted) return null;
+
   return (
     <>
       {/* 3D Entry Animation Container */}
       {!introFinished && (
-        <Intro3D onComplete={() => setIntroFinished(true)} />
+        <Intro3D onComplete={handleIntroComplete} />
       )}
 
       <main className={`transition-opacity duration-1000 ${introFinished ? "opacity-100" : "opacity-0"}`}>
