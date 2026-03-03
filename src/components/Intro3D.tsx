@@ -145,6 +145,7 @@ const VideoBackground = () => {
     const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 
     useEffect(() => {
+        let isMounted = true;
         const video = document.createElement('video');
         video.src = "/videos/front-screen.mp4";
         video.crossOrigin = "Anonymous";
@@ -152,16 +153,26 @@ const VideoBackground = () => {
         video.muted = false; // Try audio by default
         video.playsInline = true;
 
-        const playPromise = video.play();
-        if (playPromise !== undefined) {
-            playPromise.catch(e => {
+        const attemptPlay = async () => {
+            try {
+                await video.play();
+            } catch (e: any) {
+                if (!isMounted) return;
+
                 // Browser definitively blocked unmuted autoplay.
                 if (e.name === 'NotAllowedError') {
                     video.muted = true; // Fallback to muted so the video shows!
-                    video.play().catch(err => console.error("Muted playback failed:", err));
+                    try {
+                        await video.play();
+                    } catch (err: any) {
+                        if (err.name !== 'AbortError') {
+                            console.error("Muted playback failed:", err);
+                        }
+                    }
 
                     // Secretly restore audio the moment they interact in ANY way
                     const silentUnmute = () => {
+                        if (!isMounted) return;
                         if (video.muted) {
                             video.muted = false;
                             video.play().catch(() => { }); // Resync play to be safe
@@ -172,14 +183,17 @@ const VideoBackground = () => {
 
                     const events = ['click', 'scroll', 'mousemove', 'touchstart', 'keydown', 'pointerdown'];
                     events.forEach(evt => window.addEventListener(evt, silentUnmute, { once: true }));
+                } else if (e.name !== 'AbortError') {
+                    console.error("Autoplay failed:", e);
                 }
-            });
-        }
+            }
+        };
 
+        attemptPlay();
         setVideoElement(video);
 
         const handleStopAudio = () => {
-            if (video) {
+            if (video && isMounted) {
                 video.muted = true;
             }
         };
@@ -187,10 +201,13 @@ const VideoBackground = () => {
         window.addEventListener('stopIntroAudio', handleStopAudio);
 
         return () => {
+            isMounted = false;
             window.removeEventListener('stopIntroAudio', handleStopAudio);
-            video.pause();
-            video.removeAttribute('src');
-            video.load();
+            if (video) {
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+            }
         };
     }, []);
 
